@@ -36,12 +36,12 @@ To install this custom resource provider, type:
 aws cloudformation create-stack \
        --capabilities CAPABILITY_IAM \
        --stack-name cfn-container-image-provider \
-       --template-url s3://binxio-public-eu-central-1/lambdas/cfn-container-image-provider-0.1.1.yaml
+       --template-url s3://binxio-public-eu-central-1/lambdas/cfn-container-image-provider-0.1.2.yaml
 
 aws cloudformation wait stack-create-complete \
        --stack-name cfn-container-image-provider
 ```
-or use [![](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-central-1#/stacks/new?stackName=cfn-container-image-provider&templateURL=https://binxio-public-eu-central-1.s3.amazonaws.com/lambdas/cfn-container-image-provider-0.1.1.yaml)
+or use [![](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-central-1#/stacks/new?stackName=cfn-container-image-provider&templateURL=https://binxio-public-eu-central-1.s3.amazonaws.com/lambdas/cfn-container-image-provider-0.1.2.yaml)
 
 ## Demo
 To install a simple sample of the custom ContainerImage resource, type:
