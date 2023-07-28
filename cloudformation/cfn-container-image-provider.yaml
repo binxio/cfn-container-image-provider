@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Custom::ContainerImage provider'
+Parameters:
+  S3BucketPrefix:
+    Type: String
+    Default: 'binxio-public'
+Resources:
+  CFNCustomProvider:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: 'Custom container image provider'
+      Code:
+        S3Bucket: !Sub '${S3BucketPrefix}-${AWS::Region}'
+        S3Key: 'lambdas/cfn-container-image-provider-0.0.0-9-g258bc07.zip'
+      FunctionName: 'cfn-container-image-provider'
+      Handler: 'bootstrap'
+      MemorySize: 1024
+      Timeout: 900
+      Role: !GetAtt 'LambdaRole.Arn'
+      Runtime: 'provided.al2'
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      Policies:
+        - PolicyName: PushToElasticContainerRegistry
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:PutImage
+                  - ecr:DeleteImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                Resource: '*'
+
+        - PolicyName: WriteToLogGroupPermission
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                Resource: !GetAtt 'CFNCustomProviderLogGroup.Arn'
+
+
+  CFNCustomProviderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: '/aws/lambda/cfn-container-image-provider'
+      RetentionInDays: 7

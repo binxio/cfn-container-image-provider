@@ -1,0 +1,39 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Demo custom ContainerImage provider
+Resources:
+  Repository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: python
+
+  Python37:
+    Type: 'Custom::ContainerImage'
+    Properties:
+      ImageReference: python:3.7
+      RepositoryArn: !GetAtt Repository.Arn
+      ServiceToken: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:cfn-container-image-provider'
+
+  Python39:
+    Type: 'Custom::ContainerImage'
+    Properties:
+      ImageReference: python:3.9@sha256:3d35a404db586d00a4ee5a65fd1496fe019ed4bdc068d436a67ce5b64b8b9659
+      RepositoryArn: !GetAtt Repository.Arn
+      ServiceToken: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:cfn-container-image-provider'
+
+Outputs:
+  'Python37':
+    Description: the id of the Python37
+    Value:  !Ref 'Python37'
+
+  'Python39':
+    Description: the id of the Python39
+    Value:  !Ref 'Python39'
+
+  'Python37Digest':
+    Description: the digest of the Python37
+    Value: !GetAtt 'Python37.Digest'
+
+  'Python39Digest':
+    Description: the digest of Python39
+    Value: !GetAtt 'Python39.Digest'

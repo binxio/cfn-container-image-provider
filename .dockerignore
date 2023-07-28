@@ -1,0 +1,6 @@
+.idea/
+target/
+dist/
+build/
+tests/
+cfn-container-image-provider
