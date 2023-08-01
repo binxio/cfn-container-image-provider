@@ -22,6 +22,7 @@ type resourceProperties struct {
 	Source         name.Reference
 	SourceTag      string
 	SourceDigest   string
+	SourceName     string
 	Target         name.Reference
 	Region         string
 	AccountID      string
@@ -32,9 +33,9 @@ var ecrRepositoryArnPattern = regexp.MustCompile(`^arn:aws:ecr:([a-z\d-]+):(\d+)
 
 func validate(event cfn.Event) (*resourceProperties, error) {
 	var err error
+	var imageReference reference.Reference
 	result := new(resourceProperties)
 
-	var imageReference reference.Reference
 	if ref, ok := event.ResourceProperties["ImageReference"].(string); ok {
 		imageReference, err = reference.Parse(ref)
 		if err != nil {
@@ -45,19 +46,38 @@ func validate(event cfn.Event) (*resourceProperties, error) {
 		return nil, fmt.Errorf("ImageReference is missing or not a string")
 	}
 
-	if tagged, ok := imageReference.(reference.Tagged); ok {
-		result.SourceTag = tagged.Tag()
-	} else {
-		if digestRef, ok := imageReference.(reference.Digested); ok {
-			result.SourceDigest = digestRef.Digest().String()
-		} else {
-			result.SourceTag = "latest"
-		}
-	}
-
 	result.Source, err = name.ParseReference(reference.FamiliarString(imageReference))
 	if err != nil {
 		return nil, err
+	}
+
+	parts := reference.ReferenceRegexp.FindStringSubmatch(imageReference.String())
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("reference.ReferenceRegexp failed to match %s", imageReference)
+	}
+	if len(parts) > 3 {
+		result.SourceDigest = parts[3]
+	}
+	if len(parts) > 2 {
+		result.SourceTag = parts[2]
+	}
+	if len(parts) > 1 {
+		result.SourceName = parts[1]
+	}
+
+	if result.SourceDigest == "" && result.SourceTag == "" {
+		result.SourceTag = "latest"
+	}
+
+	if result.SourceDigest != "" {
+		var digestReference reference.Reference
+		digestReference, err = reference.Parse(fmt.Sprintf("%s@%s", result.SourceName, result.SourceDigest))
+		if err != nil {
+			return nil, fmt.Errorf("failed to turn source reference into a digest reference %s@%s, %s", result.SourceName, result.SourceDigest, err)
+		}
+		if result.Source, err = name.ParseReference(reference.FamiliarString(digestReference)); err != nil {
+			return nil, fmt.Errorf("failed to turn source reference into a digest reference %s, %s", digestReference, err)
+		}
 	}
 
 	if arn, ok := event.ResourceProperties["RepositoryArn"].(string); ok {
@@ -147,8 +167,6 @@ func create(ctx context.Context, event cfn.Event, authenticator authn.Authentica
 		data = map[string]interface{}{
 			"Digest": digest.String(),
 		}
-	} else {
-		return properties.Target.String(), nil, fmt.Errorf("failed to obtain digest of image: %s", err)
 	}
 
 	return properties.Target.String(), data, nil

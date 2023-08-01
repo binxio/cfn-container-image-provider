@@ -2,10 +2,16 @@ package container_image
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"reflect"
 	"regexp"
 	"testing"
+
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ecr"
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/google/go-containerregistry/pkg/name"
 
@@ -49,6 +55,7 @@ func Test_validate(t *testing.T) {
 				RepositoryName: "python",
 				SourceTag:      "",
 				SourceDigest:   "sha256:3d35a404db586d00a4ee5a65fd1496fe019ed4bdc068d436a67ce5b64b8b9659",
+				SourceName:     "docker.io/library/python",
 			},
 			wantErr:        false,
 			wantErrMessage: "",
@@ -65,12 +72,14 @@ func Test_validate(t *testing.T) {
 				},
 			},
 			want: &resourceProperties{
-				Source:         mustParse("python:3.9@sha256:3d35a404db586d00a4ee5a65fd1496fe019ed4bdc068d436a67ce5b64b8b9659"),
+				Source:         mustParse("python@sha256:3d35a404db586d00a4ee5a65fd1496fe019ed4bdc068d436a67ce5b64b8b9659"),
 				Target:         mustParse("444093529715.dkr.ecr.eu-central-1.amazonaws.com/python:3.9"),
 				Region:         "eu-central-1",
 				AccountID:      "444093529715",
 				RepositoryName: "python",
 				SourceTag:      "3.9",
+				SourceDigest:   "sha256:3d35a404db586d00a4ee5a65fd1496fe019ed4bdc068d436a67ce5b64b8b9659",
+				SourceName:     "docker.io/library/python",
 			},
 			wantErr: false,
 		},
@@ -91,6 +100,7 @@ func Test_validate(t *testing.T) {
 				AccountID:      "444093529715",
 				RepositoryName: "python",
 				SourceTag:      "3.9",
+				SourceName:     "docker.io/library/python",
 			},
 			wantErr: false,
 		},
@@ -145,6 +155,28 @@ func Test_validate(t *testing.T) {
 			want:           nil,
 			wantErr:        true,
 			wantErrMessage: "RepositoryArn is missing or not a string",
+		},
+		{
+			name: "LatestAndDigest",
+			args: args{
+				event: cfn.Event{
+					ResourceProperties: map[string]interface{}{
+						"ImageReference": "public.ecr.aws/docker/library/alpine:latest@sha256:82d1e9d7ed48a7523bdebc18cf6290bdb97b82302a8a9c27d4fe885949ea94d1",
+						"RepositoryArn":  "arn:aws:ecr:eu-central-1:444093529715:repository/alpine",
+					},
+				},
+			},
+			want: &resourceProperties{
+				Source:         mustParse("public.ecr.aws/docker/library/alpine@sha256:82d1e9d7ed48a7523bdebc18cf6290bdb97b82302a8a9c27d4fe885949ea94d1"),
+				Target:         mustParse("444093529715.dkr.ecr.eu-central-1.amazonaws.com/alpine:latest"),
+				Region:         "eu-central-1",
+				AccountID:      "444093529715",
+				RepositoryName: "alpine",
+				SourceTag:      "latest",
+				SourceDigest:   "sha256:82d1e9d7ed48a7523bdebc18cf6290bdb97b82302a8a9c27d4fe885949ea94d1",
+				SourceName:     "public.ecr.aws/docker/library/alpine",
+			},
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
@@ -289,5 +321,61 @@ func Test_handler(t *testing.T) {
 				return
 			}
 		})
+	}
+}
+
+func Test_tagging_image(t *testing.T) {
+	var err error
+	var awsSession *session.Session
+	var ecrService *ecr.ECR
+	var basicAuthentication *authn.Basic
+
+	if awsSession, err = session.NewSessionWithOptions(
+		session.Options{SharedConfigState: session.SharedConfigEnable}); err != nil {
+		t.Fatal(err)
+	} else {
+		ecrService = ecr.New(awsSession)
+	}
+
+	if basicAuthentication, err = getAuthentication(ecrService); err != nil {
+		t.Fatal(err)
+	}
+
+	pullOptions := []remote.Option{
+		remote.WithAuth(basicAuthentication),
+		remote.WithContext(context.Background()),
+	}
+
+	digests := []string{
+		"sha256:3d35a404db586d00a4ee5a65fd1496fe019ed4bdc068d436a67ce5b64b8b9659",
+		"sha256:2e94e493d6d5010d739ea473e44ea40f7c6e168bcb78e0c5a48c64f06aafbf5f",
+	}
+
+	for i := 0; i < 2; i++ {
+		for _, digest := range digests {
+			request := cfn.Event{
+				ResourceType: "Custom::ContainerImage",
+				RequestType:  "Create",
+				ResourceProperties: map[string]interface{}{
+					"ImageReference": fmt.Sprintf("docker.io/library/python:3.9@%s", digest),
+					"RepositoryArn":  "arn:aws:ecr:eu-central-1:444093529715:repository/cfn-container-image-provider-demo",
+				},
+			}
+
+			physicalResourceId, digestResult, err := Handler(context.Background(), request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if d, ok := digestResult["Digest"].(string); !ok || d != digest {
+				t.Logf("incorrect digest returned:\ngot: %s\nexp: %s\n", d, digest)
+			}
+			descriptor, err := remote.Get(mustParse(physicalResourceId), pullOptions...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if descriptor.Digest.String() != digest {
+				t.Logf("got: %s\nexp: %s\n", descriptor.Digest, digest)
+			}
+		}
 	}
 }
