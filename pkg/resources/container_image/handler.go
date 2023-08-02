@@ -29,7 +29,7 @@ type resourceProperties struct {
 	RepositoryName string
 }
 
-var ecrRepositoryArnPattern = regexp.MustCompile(`^arn:aws:ecr:([a-z\d-]+):(\d+):repository/([a-zA-Z\d-_]+)$`)
+var ecrRepositoryArnPattern = regexp.MustCompile(`^arn:aws:ecr:([a-z\d-]+):(\d+):repository/([a-zA-Z\d-_/]+)$`)
 
 func validate(event cfn.Event) (*resourceProperties, error) {
 	var err error

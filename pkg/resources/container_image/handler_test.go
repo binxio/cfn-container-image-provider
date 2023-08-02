@@ -38,6 +38,30 @@ func Test_validate(t *testing.T) {
 		wantErrMessage string
 	}{
 		{
+			name: "ValidRepositorAr",
+			args: args{
+				event: cfn.Event{
+					ResourceProperties: map[string]interface{}{
+						"ImageReference": "docker.io/mesosphere/aws-cli:latest",
+						"RepositoryArn":  "arn:aws:ecr:eu-central-1:444093529715:repository/mesosphere/aws-cli",
+					},
+				},
+			},
+			want: &resourceProperties{
+				Source:         mustParse("mesosphere/aws-cli:latest"),
+				Target:         mustParse("444093529715.dkr.ecr.eu-central-1.amazonaws.com/mesosphere/aws-cli:latest"),
+				Region:         "eu-central-1",
+				AccountID:      "444093529715",
+				RepositoryName: "mesosphere/aws-cli",
+				SourceTag:      "latest",
+				SourceDigest:   "",
+				SourceName:     "docker.io/mesosphere/aws-cli",
+			},
+			wantErr:        false,
+			wantErrMessage: "",
+		},
+
+		{
 			name: "DigestWithoutTag",
 			args: args{
 				event: cfn.Event{
