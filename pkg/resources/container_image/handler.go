@@ -29,7 +29,8 @@ type resourceProperties struct {
 	RepositoryName string
 }
 
-var ecrRepositoryArnPattern = regexp.MustCompile(`^arn:aws:ecr:([a-z\d-]+):(\d+):repository/([a-zA-Z\d-_/]+)$`)
+// The name must start with a letter and can only contain lowercase letters, numbers, hyphens, underscores, periods and forward slashes.
+var ecrRepositoryArnPattern = regexp.MustCompile(`^arn:aws:ecr:([a-z\d-]+):(\d+):repository/([a-z][a-z\d-_/.]+)$`)
 
 func validate(event cfn.Event) (*resourceProperties, error) {
 	var err error
