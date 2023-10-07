@@ -1,9 +1,23 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'Custom::ContainerImage provider'
 Parameters:
+  AppVPC:
+    Type: String
+    Default: ''
+  Subnets:
+    Type: CommaDelimitedList
+    Default: ""
+  SecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: ""
   S3BucketPrefix:
     Type: String
     Default: 'binxio-public'
+
+Conditions:
+  DoNotAttachToVpc: !Equals
+      - !Ref 'AppVPC'
+      - ''
 Resources:
   CFNCustomProvider:
     Type: AWS::Lambda::Function
@@ -18,6 +32,11 @@ Resources:
       Timeout: 900
       Role: !GetAtt 'LambdaRole.Arn'
       Runtime: 'provided.al2'
+      VpcConfig: !If
+        - DoNotAttachToVpc
+        - !Ref 'AWS::NoValue'
+        - SubnetIds: !Ref 'Subnets'
+          SecurityGroupIds: !Ref 'SecurityGroupIds'
 
   LambdaRole:
     Type: AWS::IAM::Role
@@ -31,6 +50,8 @@ Resources:
             Principal:
               Service:
                 - lambda.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
         - PolicyName: PushToElasticContainerRegistry
           PolicyDocument:
