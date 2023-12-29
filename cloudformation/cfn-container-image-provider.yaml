@@ -29,7 +29,7 @@ Resources:
       Description: 'Custom container image provider'
       Code:
         S3Bucket: !Sub '${S3BucketPrefix}-${AWS::Region}'
-        S3Key: 'lambdas/cfn-container-image-provider-0.2.4.zip'
+        S3Key: 'lambdas/cfn-container-image-provider-0.3.0.zip'
       FunctionName: 'cfn-container-image-provider'
       Handler: 'bootstrap'
       MemorySize: 1024
