@@ -5,8 +5,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"os"
 	"regexp"
 	"strings"
+
+	"github.com/google/go-containerregistry/pkg/logs"
 
 	"github.com/aws/aws-lambda-go/cfn"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -123,36 +126,13 @@ func validate(event cfn.Event) (*resourceProperties, error) {
 	return result, nil
 }
 
-func reportProgress(action string) func(chan v1.Update) {
-	return func(progress chan v1.Update) {
-		var previousPercentage int64
-		for p := range progress {
-			var percentage int64
-			if p.Total != 0 {
-				percentage = p.Complete * 100 / p.Total
-			}
-			if previousPercentage != percentage {
-				log.Printf("%s: %d%%\n", action, percentage)
-				previousPercentage = percentage
-			}
-			if p.Error != nil {
-				log.Printf("%s failed: %s", action, p.Error)
-			}
-		}
-	}
-}
-
 func create(ctx context.Context, event cfn.Event, authenticator authn.Authenticator) (physicalResourceID string, data map[string]interface{}, err error) {
 	var properties *resourceProperties
 	if properties, err = validate(event); err != nil {
 		return "", nil, err
 	}
 
-	pullProgress := make(chan v1.Update)
-	go reportProgress("Pull")(pullProgress)
-
 	pullOptions := []remote.Option{
-		remote.WithProgress(pullProgress),
 		remote.WithContext(ctx),
 	}
 	if properties.Platform != nil {
@@ -164,11 +144,7 @@ func create(ctx context.Context, event cfn.Event, authenticator authn.Authentica
 		return "", nil, fmt.Errorf("failed to create puller for repository: %w", err)
 	}
 
-	pushProgress := make(chan v1.Update)
-	go reportProgress("Push")(pushProgress)
-
 	pushOptions := []remote.Option{
-		remote.WithProgress(pushProgress),
 		remote.WithAuth(authenticator),
 		remote.WithContext(ctx),
 	}
@@ -252,6 +228,9 @@ func Handler(ctx context.Context, event cfn.Event) (physicalResourceID string, d
 	var awsSession *session.Session
 	var ecrService *ecr.ECR
 	var basicAuthentication *authn.Basic
+
+	logs.Warn.SetOutput(os.Stderr)
+	logs.Progress.SetOutput(os.Stderr)
 
 	if awsSession, err = session.NewSessionWithOptions(
 		session.Options{SharedConfigState: session.SharedConfigEnable}); err != nil {
