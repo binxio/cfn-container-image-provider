@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"testing"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecr"
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -20,6 +22,14 @@ import (
 
 func mustParse(s string) name.Reference {
 	result, err := name.ParseReference(s)
+	if err != nil {
+		log.Fatalf("%s", err)
+	}
+	return result
+}
+
+func mustParsePlatform(s string) *v1.Platform {
+	result, err := v1.ParsePlatform(s)
 	if err != nil {
 		log.Fatalf("%s", err)
 	}
@@ -129,6 +139,29 @@ func Test_validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "Platform",
+			args: args{
+				event: cfn.Event{
+					ResourceProperties: map[string]interface{}{
+						"ImageReference": "docker.io/library/python:3.9",
+						"Platform":       "linux/amd64",
+						"RepositoryArn":  "arn:aws:ecr:eu-central-1:444093529715:repository/python",
+					},
+				},
+			},
+			want: &resourceProperties{
+				Source:         mustParse("python:3.9"),
+				Target:         mustParse("444093529715.dkr.ecr.eu-central-1.amazonaws.com/python:3.9"),
+				Region:         "eu-central-1",
+				AccountID:      "444093529715",
+				RepositoryName: "python",
+				SourceTag:      "3.9",
+				SourceName:     "docker.io/library/python",
+				Platform:       mustParsePlatform("linux/amd64"),
+			},
+			wantErr: false,
+		},
+		{
 			name: "IncorrectName",
 			args: args{
 				event: cfn.Event{
@@ -179,6 +212,20 @@ func Test_validate(t *testing.T) {
 			want:           nil,
 			wantErr:        true,
 			wantErrMessage: "RepositoryArn is missing or not a string",
+		},
+		{
+			name: "InvalidPlatform",
+			args: args{
+				event: cfn.Event{
+					ResourceProperties: map[string]interface{}{
+						"ImageReference": "docker.io/library/python:3.9",
+						"Platform":       "linux/sdfasdf/more/sdfsdfd/dsdfsfd",
+						"RepositoryArn":  "arn:aws:ecr:eu-central-1:444093529715:repository/python",
+					},
+				},
+			},
+			want:    nil,
+			wantErr: true,
 		},
 		{
 			name: "LatestAndDigest",
@@ -299,6 +346,24 @@ func Test_handler(t *testing.T) {
 				},
 			},
 			wantPhysicalResourceID: "444093529715.dkr.ecr.eu-central-1.amazonaws.com/cfn-container-image-provider-demo:latest",
+			wantErr:                false,
+			wantErrMessage:         "",
+		},
+		{
+			name: "PlatformSpecific",
+			args: args{
+				ctx: context.Background(),
+				event: cfn.Event{
+					ResourceType: "Custom::ContainerImage",
+					RequestType:  "Create",
+					ResourceProperties: map[string]interface{}{
+						"ImageReference": "python:3.9.18",
+						"Platform":       "linux/amd64",
+						"RepositoryArn":  "arn:aws:ecr:eu-central-1:444093529715:repository/cfn-container-image-provider-demo",
+					},
+				},
+			},
+			wantPhysicalResourceID: "444093529715.dkr.ecr.eu-central-1.amazonaws.com/cfn-container-image-provider-demo:3.9.18",
 			wantErr:                false,
 			wantErrMessage:         "",
 		},

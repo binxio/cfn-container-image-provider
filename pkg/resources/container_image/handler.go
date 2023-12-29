@@ -23,6 +23,7 @@ type resourceProperties struct {
 	SourceTag      string
 	SourceDigest   string
 	SourceName     string
+	Platform       *v1.Platform
 	Target         name.Reference
 	Region         string
 	AccountID      string
@@ -112,6 +113,13 @@ func validate(event cfn.Event) (*resourceProperties, error) {
 	} else {
 		return nil, fmt.Errorf("RepositoryArn is missing or not a string")
 	}
+
+	if platform, ok := event.ResourceProperties["Platform"].(string); ok {
+		result.Platform, err = v1.ParsePlatform(platform)
+		if err != nil {
+			return nil, fmt.Errorf("invalid Platform format, %s", err)
+		}
+	}
 	return result, nil
 }
 
@@ -147,9 +155,13 @@ func create(ctx context.Context, event cfn.Event, authenticator authn.Authentica
 		remote.WithProgress(pullProgress),
 		remote.WithContext(ctx),
 	}
-	image, err := remote.Image(properties.Source, pullOptions...)
+	if properties.Platform != nil {
+		pullOptions = append(pullOptions, remote.WithPlatform(*properties.Platform))
+	}
+
+	puller, err := remote.NewPuller(pullOptions...)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to pull the Docker image: %w", err)
+		return "", nil, fmt.Errorf("failed to create puller for repository: %w", err)
 	}
 
 	pushProgress := make(chan v1.Update)
@@ -160,14 +172,36 @@ func create(ctx context.Context, event cfn.Event, authenticator authn.Authentica
 		remote.WithAuth(authenticator),
 		remote.WithContext(ctx),
 	}
-	if err = remote.Write(properties.Target, image, pushOptions...); err != nil {
-		return "", nil, fmt.Errorf("failed to push the Docker image to ECR: %w", err)
+
+	pusher, err := remote.NewPusher(pushOptions...)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to create pusher for repository: %w", err)
 	}
 
-	if digest, err := image.Digest(); err == nil {
-		data = map[string]interface{}{
-			"Digest": digest.String(),
+	descriptor, err := puller.Get(ctx, properties.Source)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to get descriptor for repository: %w", err)
+	}
+
+	if properties.Platform == nil {
+		err = pusher.Push(ctx, properties.Target, descriptor)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to push descriptor: %w", err)
 		}
+	} else {
+		image, err := descriptor.Image()
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to get the platform specific image from descriptor: %w", err)
+		}
+		err = pusher.Push(ctx, properties.Target, image)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to push image: %w", err)
+		}
+	}
+
+	data = map[string]interface{}{
+		"Digest":         descriptor.Digest.String(),
+		"ImageReference": properties.Target.String(),
 	}
 
 	return properties.Target.String(), data, nil

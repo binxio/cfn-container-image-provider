@@ -12,11 +12,11 @@ Resources:
   Python37:
     Type: 'Custom::ContainerImage'
     Properties:
-      ImageReference: python:3.7
+      ImageReference: python:3.9
       RepositoryArn: !GetAtt Repository.Arn
       ServiceToken: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:cfn-container-image-provider'
 ```
-This will copy the current repository from python:3.7 to the python-clone repository. If you
+This will copy the multi-architecture repository from python:3.9 to the python-clone repository. If you
 want a specific version, add the digest:
 
 ```yaml
@@ -27,6 +27,18 @@ want a specific version, add the digest:
       RepositoryArn: !GetAtt Repository.Arn
       ServiceToken: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:cfn-container-image-provider'
 ```
+
+If you want a specific platform only, specify Platform too:
+```yaml
+  Python39:
+    Type: 'Custom::ContainerImage'
+    Properties:
+      ImageReference: python:3.9@sha256:3d35a404db586d00a4ee5a65fd1496fe019ed4bdc068d436a67ce5b64b8b9659
+      Platform: linux/amd64
+      RepositoryArn: !GetAtt Repository.Arn
+      ServiceToken: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:cfn-container-image-provider'
+```
+
 When the resource is deleted, the image will be removed too.
 
 ## Installation
