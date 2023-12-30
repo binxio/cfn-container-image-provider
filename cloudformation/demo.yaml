@@ -18,6 +18,7 @@ Resources:
     Type: 'Custom::ContainerImage'
     Properties:
       ImageReference: python:3.9
+      Platform: all
       RepositoryArn: !GetAtt Repository.Arn
       ServiceToken: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:cfn-container-image-provider'
 
@@ -37,3 +38,11 @@ Outputs:
   'Python39Digest':
     Description: the digest of Python39
     Value: !GetAtt 'Python39.Digest'
+
+  'Python37Platforms':
+    Description: the platforms of Python37
+    Value: !Join [ ',', !GetAtt 'Python37.Platforms']
+
+  'Python39Platforms':
+    Description: the platforms of Python39
+    Value: !Join [ ',', !GetAtt 'Python39.Platforms']
