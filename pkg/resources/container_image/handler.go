@@ -118,10 +118,17 @@ func validate(event cfn.Event) (*resourceProperties, error) {
 	}
 
 	if platform, ok := event.ResourceProperties["Platform"].(string); ok {
-		result.Platform, err = v1.ParsePlatform(platform)
-		if err != nil {
-			return nil, fmt.Errorf("invalid Platform format, %s", err)
+		if strings.TrimSpace(strings.ToLower(platform)) == "all" {
+			result.Platform = nil
+		} else {
+			result.Platform, err = v1.ParsePlatform(platform)
+			if err != nil {
+				return nil, fmt.Errorf("invalid Platform format, %s", err)
+			}
 		}
+	} else {
+		// backwards compatible with first release
+		result.Platform = &v1.Platform{OS: "linux", Architecture: "amd64"}
 	}
 	return result, nil
 }
@@ -175,12 +182,35 @@ func create(ctx context.Context, event cfn.Event, authenticator authn.Authentica
 		}
 	}
 
+	var platforms []string
+	if properties.Platform != nil {
+		platforms = []string{properties.Platform.String()}
+	} else {
+		platforms = getPlatforms(descriptor)
+	}
+
 	data = map[string]interface{}{
 		"Digest":         descriptor.Digest.String(),
 		"ImageReference": properties.Target.String(),
+		"Platforms":      platforms,
 	}
 
 	return properties.Target.String(), data, nil
+}
+
+func getPlatforms(descriptor *remote.Descriptor) (platforms []string) {
+	platforms = make([]string, 0)
+
+	if index, err := descriptor.ImageIndex(); err == nil {
+		if indexManifest, err := index.IndexManifest(); err == nil {
+			for _, manifest := range indexManifest.Manifests {
+				if manifest.Platform != nil {
+					platforms = append(platforms, manifest.Platform.String())
+				}
+			}
+		}
+	}
+	return
 }
 
 func delete(ctx context.Context, event cfn.Event, authenticator authn.Authenticator) (physicalResourceID string, data map[string]interface{}, err error) {

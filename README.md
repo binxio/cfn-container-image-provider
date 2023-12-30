@@ -13,6 +13,7 @@ Resources:
     Type: 'Custom::ContainerImage'
     Properties:
       ImageReference: python:3.9
+      Platform: all
       RepositoryArn: !GetAtt Repository.Arn
       ServiceToken: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:cfn-container-image-provider'
 ```
@@ -23,6 +24,7 @@ want a specific version, add the digest:
   Python39:
     Type: 'Custom::ContainerImage'
     Properties:
+      Platform: all
       ImageReference: python:3.9@sha256:3d35a404db586d00a4ee5a65fd1496fe019ed4bdc068d436a67ce5b64b8b9659
       RepositoryArn: !GetAtt Repository.Arn
       ServiceToken: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:cfn-container-image-provider'
@@ -34,12 +36,26 @@ If you want a specific platform only, specify Platform too:
     Type: 'Custom::ContainerImage'
     Properties:
       ImageReference: python:3.9@sha256:3d35a404db586d00a4ee5a65fd1496fe019ed4bdc068d436a67ce5b64b8b9659
-      Platform: linux/amd64
+      Platform: linux/arm64
       RepositoryArn: !GetAtt Repository.Arn
       ServiceToken: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:cfn-container-image-provider'
 ```
 
+If you do not specify a platform, linux/amd64 will be used as the default.
+
+## on Resource Delete
 When the resource is deleted, the image will be removed too.
+
+## Return Values
+The following attributes are returned:
+
+| name           | description                                        |
+|----------------|----------------------------------------------------|
+| Digest         | the digest hash of the image                       |
+| ImageReference | the container image reference name to use in pull  |
+| Platforms      | array of platform names availabe in the repository |
+
+When you reference the CFN resource, it will return the ImageReference.
 
 ## Installation
 To install this custom resource provider, type:

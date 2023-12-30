@@ -36,6 +36,15 @@ func mustParsePlatform(s string) *v1.Platform {
 	return result
 }
 
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
+}
+
 func Test_validate(t *testing.T) {
 	type args struct {
 		event cfn.Event
@@ -66,6 +75,7 @@ func Test_validate(t *testing.T) {
 				SourceTag:      "latest",
 				SourceDigest:   "",
 				SourceName:     "docker.io/mesosphere/aws-cli",
+				Platform:       mustParsePlatform("linux/amd64"),
 			},
 			wantErr:        false,
 			wantErrMessage: "",
@@ -90,6 +100,7 @@ func Test_validate(t *testing.T) {
 				SourceTag:      "",
 				SourceDigest:   "sha256:3d35a404db586d00a4ee5a65fd1496fe019ed4bdc068d436a67ce5b64b8b9659",
 				SourceName:     "docker.io/library/python",
+				Platform:       mustParsePlatform("linux/amd64"),
 			},
 			wantErr:        false,
 			wantErrMessage: "",
@@ -114,6 +125,7 @@ func Test_validate(t *testing.T) {
 				SourceTag:      "3.9",
 				SourceDigest:   "sha256:3d35a404db586d00a4ee5a65fd1496fe019ed4bdc068d436a67ce5b64b8b9659",
 				SourceName:     "docker.io/library/python",
+				Platform:       mustParsePlatform("linux/amd64"),
 			},
 			wantErr: false,
 		},
@@ -135,16 +147,17 @@ func Test_validate(t *testing.T) {
 				RepositoryName: "python",
 				SourceTag:      "3.9",
 				SourceName:     "docker.io/library/python",
+				Platform:       mustParsePlatform("linux/amd64"),
 			},
 			wantErr: false,
 		},
 		{
-			name: "Platform",
+			name: "SpecificPlatform",
 			args: args{
 				event: cfn.Event{
 					ResourceProperties: map[string]interface{}{
 						"ImageReference": "docker.io/library/python:3.9",
-						"Platform":       "linux/amd64",
+						"Platform":       "linux/arm64",
 						"RepositoryArn":  "arn:aws:ecr:eu-central-1:444093529715:repository/python",
 					},
 				},
@@ -157,7 +170,30 @@ func Test_validate(t *testing.T) {
 				RepositoryName: "python",
 				SourceTag:      "3.9",
 				SourceName:     "docker.io/library/python",
-				Platform:       mustParsePlatform("linux/amd64"),
+				Platform:       mustParsePlatform("linux/arm64"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "MultiArchitecture",
+			args: args{
+				event: cfn.Event{
+					ResourceProperties: map[string]interface{}{
+						"ImageReference": "docker.io/library/python:3.9",
+						"Platform":       "all",
+						"RepositoryArn":  "arn:aws:ecr:eu-central-1:444093529715:repository/python",
+					},
+				},
+			},
+			want: &resourceProperties{
+				Source:         mustParse("python:3.9"),
+				Target:         mustParse("444093529715.dkr.ecr.eu-central-1.amazonaws.com/python:3.9"),
+				Region:         "eu-central-1",
+				AccountID:      "444093529715",
+				RepositoryName: "python",
+				SourceTag:      "3.9",
+				SourceName:     "docker.io/library/python",
+				Platform:       nil,
 			},
 			wantErr: false,
 		},
@@ -246,6 +282,7 @@ func Test_validate(t *testing.T) {
 				SourceTag:      "latest",
 				SourceDigest:   "sha256:82d1e9d7ed48a7523bdebc18cf6290bdb97b82302a8a9c27d4fe885949ea94d1",
 				SourceName:     "public.ecr.aws/docker/library/alpine",
+				Platform:       mustParsePlatform("linux/amd64"),
 			},
 			wantErr: false,
 		},
@@ -350,7 +387,7 @@ func Test_handler(t *testing.T) {
 			wantErrMessage:         "",
 		},
 		{
-			name: "PlatformSpecific",
+			name: "MultiArchitecture",
 			args: args{
 				ctx: context.Background(),
 				event: cfn.Event{
@@ -358,7 +395,7 @@ func Test_handler(t *testing.T) {
 					RequestType:  "Create",
 					ResourceProperties: map[string]interface{}{
 						"ImageReference": "python:3.9.18",
-						"Platform":       "linux/amd64",
+						"Platform":       "all",
 						"RepositoryArn":  "arn:aws:ecr:eu-central-1:444093529715:repository/cfn-container-image-provider-demo",
 					},
 				},
@@ -396,6 +433,27 @@ func Test_handler(t *testing.T) {
 					t.Errorf("handler() error, no Digest in wantData")
 					return
 				}
+
+				if platforms, ok := gotData["Platforms"].([]string); ok {
+					platform, ok := tt.args.event.ResourceProperties["Platform"].(string)
+					if !ok {
+						platform = "linux/amd64"
+					}
+					if platform == "all" {
+						if len(platforms) <= 1 {
+							t.Errorf("expected multiple platform images, got %d", len(platforms))
+						}
+					} else {
+						if len(platforms) > 1 || !contains(platforms, platform) {
+							t.Errorf("expected %s in platforms %s", platform, platforms)
+						}
+					}
+				} else {
+					t.Errorf("handler() error, no Platforms in wantData")
+					return
+
+				}
+
 			}
 
 			if gotPhysicalResourceID != tt.wantPhysicalResourceID {
