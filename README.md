@@ -67,7 +67,7 @@ read -p 'security group ids (comma separated):' SECURITY_GROUP_IDS
 aws cloudformation create-stack \
        --capabilities CAPABILITY_IAM \
        --stack-name cfn-container-image-provider \
-       --template-url s3://binxio-public-eu-central-1/lambdas/cfn-container-image-provider-0.3.0.yaml \
+       --template-url s3://binxio-public-eu-central-1/lambdas/cfn-container-image-provider-0.4.0.yaml \
        --parameter-overrides \
           Name=AppVPC,Values=$VPC_ID \
           Name=Subnets,Values=$PRIVATE_SUBNET_IDS \
@@ -76,7 +76,7 @@ aws cloudformation create-stack \
 aws cloudformation wait stack-create-complete \
        --stack-name cfn-container-image-provider
 ```
-or use [![](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-central-1#/stacks/new?stackName=cfn-container-image-provider&templateURL=https://binxio-public-eu-central-1.s3.amazonaws.com/lambdas/cfn-container-image-provider-0.3.0.yaml)
+or use [![](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=eu-central-1#/stacks/new?stackName=cfn-container-image-provider&templateURL=https://binxio-public-eu-central-1.s3.amazonaws.com/lambdas/cfn-container-image-provider-0.4.0.yaml)
 
 ## Demo
 To install a simple sample of the custom ContainerImage resource, type:
