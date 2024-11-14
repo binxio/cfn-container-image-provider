@@ -4,3 +4,4 @@ dist/
 build/
 tests/
 cfn-container-image-provider
+Dockerfile

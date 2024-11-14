@@ -1,6 +1,5 @@
-NAME=cfn-container-image-provider
-S3_BUCKET_PREFIX=binxio-public
-S3_OBJECT_ACL=public-read
-AWS_REGION=eu-central-1
-
 include Makefile.mk
+
+NAME=cfn-container-image-provider
+AWS_REGION=eu-central-1
+AWS_ACCOUNT=463637877380

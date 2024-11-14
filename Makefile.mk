@@ -1,76 +1,48 @@
-S3_BUCKET=$(S3_BUCKET_PREFIX)-$(AWS_REGION)
-ifndef S3_OBJECT_ACL
-S3_OBJECT_ACL=private
-endif
-ALL_REGIONS=$(shell aws --region $(AWS_REGION) \
-		ec2 describe-regions 		\
-		--query 'join(`\n`, Regions[?RegionName != `$(AWS_REGION)`].RegionName)' \
-		--output text)
-
+AWS_REGION=eu-central-1
+AWS_ACCOUNT=$(shell aws sts get-caller-identity --query Account --output text)
+REGISTRY_HOST=$(AWS_ACCOUNT).dkr.ecr.$(AWS_REGION).amazonaws.com
+IMAGE=$(REGISTRY_HOST)/$(NAME)
+DOCKER_BUILD_ARGS=
 VERSION := $(shell git describe  --tags --dirty)
 
-build: target/$(NAME)-$(VERSION).zip		## build the lambda zip file
+build:  ## build container image snapshot
+	docker build $(DOCKER_BUILD_ARGS) -t $(IMAGE):$(VERSION) . -f Dockerfile
 
-fmt:	## formats the source code
+snapshot: build ## build and push container image
+	docker push $(IMAGE):$(VERSION)
+
+fmt:    ## formats the source code
 	go fmt ./...
 
-test:	## run unit tests
+test:   ## run unit tests
 	go test ./...
 
 test-templates:     ## validate CloudFormation templates
 	for n in ./cloudformation/*.yaml ; do aws cloudformation validate-template --template-body file://$$n ; done
 
-deploy: target/$(NAME)-$(VERSION).zip@$(S3_BUCKET_PREFIX)	## AWS lambda zipfile to bucket
-
-target/$(NAME)-$(VERSION).zip: *.go go.*
-	mkdir -p target/content
-	docker build --build-arg ZIPFILE=$(NAME)-$(VERSION).zip -t $(NAME)-lambda:$(VERSION) -f Dockerfile.lambda . && \
-		ID=$$(docker create $(NAME)-lambda:$(VERSION) /bin/true) && \
-		docker export $$ID | (cd target && tar -xvf - $(NAME)-$(VERSION).zip) && \
-		docker rm -f $$ID && \
-		chmod ugo+r target/$(NAME)-$(VERSION).zip
-
-target/$(NAME)-$(VERSION).zip@$(S3_BUCKET_PREFIX): target/$(NAME)-$(VERSION).zip
-	aws s3 --region $(AWS_REGION) \
-		cp --acl $(S3_OBJECT_ACL) \
-		cloudformation/$(NAME).yaml \
-		s3://$(S3_BUCKET)/lambdas/$(NAME)-$(VERSION).yaml
-	aws s3 --region $(AWS_REGION) \
-		cp --acl $(S3_OBJECT_ACL) \
-		target/$(NAME)-$(VERSION).zip \
-		s3://$(S3_BUCKET)/lambdas/$(NAME)-$(VERSION).zip
-	touch target/$(NAME)-$(VERSION).zip@$(S3_BUCKET_PREFIX)
-
-deploy-all-regions: target/$(NAME)-$(VERSION).zip@$(S3_BUCKET_PREFIX)	## AWS lambda zipfiles to all regional buckets
-	@for REGION in $(ALL_REGIONS); do \
-		echo "copying to region $$REGION.." ; \
-		aws s3 --region $$REGION \
-			cp  --acl $(S3_OBJECT_ACL) \
-			s3://$(S3_BUCKET)/lambdas/$(NAME)-$(VERSION).zip \
-			s3://$(S3_BUCKET_PREFIX)-$$REGION/lambdas/$(NAME)-$(VERSION).zip; \
-	done
-
-undeploy-all-regions:	## deletes AWS lambda zipfile of this release from all buckets in all regions
-	@for REGION in $(ALL_REGIONS); do \
-                echo "removing lamdba from region $$REGION.." ; \
-                aws s3 --region $(AWS_REGION) \
-                        rm  \
-                        s3://$(S3_BUCKET_PREFIX)-$$REGION/lambdas/$(NAME)-$(VERSION).zip; \
-        done
-	rm -f target/$(NAME)-$(VERSION).zip@$(S3_BUCKET_PREFIX)
-
-deploy-provider: target/$(NAME)-$(VERSION).zip@$(S3_BUCKET_PREFIX)  ## deploys the custom provider
-	sed -i -e 's^lambdas/$(NAME)-[0-9]*\.[0-9]*\.[0-9]*[^\.]*\.'^lambdas/$(NAME)-$(VERSION).^g cloudformation/$(NAME).yaml
+deploy-provider: 	 ## deploys the custom provider
+	sed -i -e 's^$(NAME):[0-9]*\.[0-9]*\..*^$(NAME):$(VERSION)^g' cloudformation/$(NAME).yaml
 	aws cloudformation deploy \
                 --capabilities CAPABILITY_IAM \
                 --stack-name $(NAME) \
                 --template-file ./cloudformation/$(NAME).yaml \
-                --parameter-overrides S3BucketPrefix=$(S3_BUCKET_PREFIX) \
 				--no-fail-on-empty-changeset
 
 delete-provider: ## deletes the custom provider
 	aws cloudformation delete-stack --stack-name $(NAME)
 	aws cloudformation wait stack-delete-complete  --stack-name $(NAME)
+
+deploy-repository:  ## deploys the ECR image repository
+	aws cloudformation deploy \
+                --capabilities CAPABILITY_IAM \
+                --stack-name $(NAME)-ecr-repository \
+                --template-file ./cloudformation/ecr-repository.yaml \
+				--no-fail-on-empty-changeset
+
+delete-repository:  ## deletes the ECR image repository
+	aws cloudformation delete-stack --stack-name $(NAME)-ecr-repository
+	aws cloudformation wait stack-delete-complete  --stack-name $(NAME)-ecr-repository
+
 
 deploy-pipeline:  ## deploys the CI/CD deployment pipeline
 	aws cloudformation deploy \
@@ -106,6 +78,10 @@ tag-major-release: ## create a tag for new major release
 show-version: ## shows the current version of the workspace
 	pipenv run git-release-tag show .
 
-help:           ## Show this help.
+ecr-login:    ## login to the ECR repository
+	aws ecr get-login-password --region $(AWS_REGION) | \
+	docker login --username AWS --password-stdin $(REGISTRY_HOST)
+
+help:         ## Show this help.
 		@egrep -h ':[^#]*##' $(MAKEFILE_LIST) | fgrep -v fgrep | sed -e 's/\\$$//' | sed -e 's/:[^#]*##/: ##/' -e 's/[ 	]*##[ 	]*/ /' | \
 		awk -F: '{printf "%-20s -", $$1; $$1=""; print $$0}'

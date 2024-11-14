@@ -13,10 +13,6 @@ Parameters:
     Type: CommaDelimitedList
     Description: Security Group ids to be associated with the provider
     Default: ""
-  S3BucketPrefix:
-    Type: String
-    Description: Prefix of the bucket which contains the Lambda source zip
-    Default: 'binxio-public'
 
 Conditions:
   DoNotAttachToVpc: !Equals
@@ -27,15 +23,13 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Description: 'Custom container image provider'
+      PackageType: Image
       Code:
-        S3Bucket: !Sub '${S3BucketPrefix}-${AWS::Region}'
-        S3Key: 'lambdas/cfn-container-image-provider-0.4.0.zip'
+        ImageUri: 463637877380.dkr.ecr.eu-central-1.amazonaws.com/xebia/cfn-container-image-provider:0.4.0-b228802-dirty
       FunctionName: 'cfn-container-image-provider'
-      Handler: 'bootstrap'
       MemorySize: 1024
       Timeout: 900
       Role: !GetAtt 'LambdaRole.Arn'
-      Runtime: 'provided.al2'
       VpcConfig: !If
         - DoNotAttachToVpc
         - !Ref 'AWS::NoValue'
