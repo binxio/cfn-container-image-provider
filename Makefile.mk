@@ -68,16 +68,16 @@ delete-demo: ## deletes the demo stack
 	aws cloudformation wait stack-delete-complete  --stack-name $(NAME)-demo
 
 tag-patch-release: ## create a tag for a new patch release
-	pipenv run git-release-tag bump --level patch
+	git-release-tag bump --level patch
 
 tag-minor-release: ## create a tag for a new minor release
-	pipenv run git-release-tag bump --level minor
+	git-release-tag bump --level minor
 
 tag-major-release: ## create a tag for new major release
-	pipenv run git-release-tag bump --level major
+	git-release-tag bump --level major
 
 show-version: ## shows the current version of the workspace
-	pipenv run git-release-tag show .
+	git-release-tag show .
 
 ecr-login:    ## login to the ECR repository
 	aws ecr get-login-password --region $(AWS_REGION) | \
