@@ -1,7 +1,8 @@
 AWS_REGION=eu-central-1
 AWS_ACCOUNT=$(shell aws sts get-caller-identity --query Account --output text)
 REGISTRY_HOST=$(AWS_ACCOUNT).dkr.ecr.$(AWS_REGION).amazonaws.com
-IMAGE=$(REGISTRY_HOST)/$(NAME)
+USERNAME=$(USER)
+IMAGE=$(REGISTRY_HOST)/$(USERNAME)/$(NAME)
 DOCKER_BUILD_ARGS=
 VERSION := $(shell git describe  --tags --dirty)
 
